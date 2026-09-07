@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบคำนวณระยะทางบิน (Borders & Advanced Time)</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d6efd">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="แผนการบิน">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="icon" href="icon-192.png">
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            margin: 0; 
+            padding: 0; 
+            display: flex; 
+            height: 100vh; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f8f9fa; 
+        }
+        #map-container { 
+            width: 50vw; 
+            height: 100vh; 
+        }
+        #map { 
+            width: 100%; 
+            height: 100%; 
+        }
+        #flight-data { 
+            width: 50vw; 
+            height: 100vh; 
+            padding: 24px 32px; 
+            overflow-y: auto; 
+            background-color: #ffffff; 
+            border-left: 1px solid #dee2e6; 
+        }
+        h2, h3, h4 { margin-top: 0; color: #212529; }
+        .form-section { 
+            background-color: #fdfdfd; 
+            border: 1px solid #e9ecef; 
+            border-radius: 6px; 
+            padding: 16px; 
+            margin-bottom: 20px; 
+        }
+        .form-group { margin-bottom: 12px; }
+        label { 
+            display: block; 
+            margin-bottom: 4px; 
+            font-weight: 600; 
+            font-size: 14px; 
+            color: #495057; 
+        }
+        .coord-row { display: flex; gap: 8px; }
+        .coord-row input[type="number"] { flex: 2; }
+        .coord-row select { flex: 1; }
+        input[type="text"], input[type="number"], select { 
+            width: 100%; 
+            padding: 8px 10px; 
+            border: 1px solid #ced4da; 
+            border-radius: 4px; 
+            font-size: 14px; 
+        }
+        .btn-group { display: flex; gap: 8px; margin-top: 10px; }
+        button { 
+            padding: 9px 15px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 14px; 
+            font-weight: 600; 
+        }
+        .btn-primary { background-color: #0d6efd; color: white; flex: 2; }
+        .btn-secondary { background-color: #6c757d; color: white; flex: 1; }
+        .btn-danger { background-color: #dc3545; color: white; width: 100%; }
+        .btn-action { padding: 4px 8px; font-size: 12px; margin-right: 4px; }
+        .btn-action-edit { background-color: #ffc107; color: #000; }
+        .btn-action-delete { background-color: #dc3545; color: #fff; }
+        .summary-box { 
+            background-color: #f8f9fa; 
+            border: 1px solid #e9ecef; 
+            border-radius: 6px; 
+            padding: 16px; 
+            margin-top: 20px; 
+        }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+        .stat-card { 
+            background: white; 
+            border: 1px solid #dee2e6; 
+            padding: 10px; 
+            border-radius: 4px; 
+            text-align: center; 
+        }
+        .stat-card .value { font-size: 18px; font-weight: bold; color: #0d6efd; }
+        .stat-card .label { font-size: 12px; color: #6c757d; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { border: 1px solid #dee2e6; padding: 8px 10px; text-align: left; vertical-align: middle; }
+        th { background-color: #e9ecef; }
+        tr:nth-child(even) { background-color: #fdfdfd; }
+        .drag-handle { cursor: grab; color: #adb5bd; text-align: center; font-size: 16px; }
+        .drag-handle:active { cursor: grabbing; }
+        
+        /* สไตล์สำหรับป้ายชื่อถาวรบนแผนที่ */
+        .wp-permanent-tooltip {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #000;
+            font-weight: 700;
+            color: #d63031;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+        }
+
+        /* กล่องค้นหาสถานที่ */
+        .search-field { position: relative; }
+        .search-results {
+            position: absolute; z-index: 1200; top: 100%; left: 0; right: 0;
+            background: #fff; border: 1px solid #ced4da; border-radius: 4px;
+            max-height: 230px; overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: none;
+        }
+        .search-results div {
+            padding: 8px 10px; font-size: 13px; cursor: pointer;
+            border-bottom: 1px solid #f1f3f5;
+        }
+        .search-results div:hover { background: #e7f1ff; }
+        .search-hint { font-size: 11px; color: #6c757d; margin-top: 4px; }
+        .search-hint.ok { color: #198754; font-weight: 600; }
+        .row-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .link-del { color: #dc3545; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .link-del:hover, .link-save:hover { text-decoration: underline; }
+        .link-save { color: #0d6efd; font-size: 12px; font-weight: 600; cursor: pointer; margin-right: 10px; }
+        .cap-btns { display: flex; gap: 8px; margin: 12px 0; }
+        .btn-share { background-color: #06C755; color: #fff; flex: 2; }
+        .btn-img { background-color: #212529; color: #fff; flex: 1; }
+        #btn-show { flex: 2; }
+        .search-hint code { background: #f1f3f5; padding: 1px 4px; border-radius: 3px; }
+
+        /* รองรับหน้าจอแคบ (มือถือ/แท็บเล็ต) */
+        @media (max-width: 900px) {
+            body { flex-direction: column; height: auto; }
+            #map-container { width: 100vw; height: 55vh; }
+            #flight-data { width: 100vw; height: auto; padding: 16px; border-left: none; border-top: 1px solid #dee2e6; }
+            .stat-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map-container"><div id="map"></div></div>
+
+    <div id="flight-data">
+        <h2>ระบบวางแผนและคำนวณเส้นทางบิน</h2>
+        
+        <div class="form-section">
+            <div class="form-group">
+                <label for="route-preset">เลือกเส้นทางตัวอย่าง:</label>
+                <select id="route-preset" onchange="loadPresetRoute()">
+                    <option value="">-- เส้นทางกำหนดเอง --</option>
+                    <option value="bkk-cnx">ดอนเมือง (VTBD) - เชียงใหม่ (VTCC)</option>
+                    <option value="bkk-hkt">ดอนเมือง (VTBD) - ภูเก็ต (VTSP)</option>
+                    <option value="bkk-nrt">สุวรรณภูมิ (VTBS) - นาริตะ (RJAA)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3>ค้นหาสถานที่ / กำหนดจุดบิน</h3>
+
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <div style="flex:1;">
+                    <label for="geo-provider">แหล่งค้นหา:</label>
+                    <select id="geo-provider" onchange="saveProvider()">
+                        <option value="free">ฟรี (Photon + OSM) — ไม่ต้องใช้ key</option>
+                        <option value="google">Google Places API</option>
+                        <option value="longdo">Longdo Map (ไทย)</option>
+                        <option value="locationiq">LocationIQ</option>
+                    </select>
+                </div>
+                <div style="flex:1;">
+                    <label for="geo-key">API Key:</label>
+                    <input type="password" id="geo-key" placeholder="วาง API key ที่นี่" oninput="saveProvider()">
+                </div>
+            </div>
+
+            <div id="search-rows"></div>
+
+            <div class="btn-group">
+                <button type="button" class="btn-secondary" onclick="addSearchRow()">+ เพิ่มจุด</button>
+                <button type="button" class="btn-primary" id="btn-show" onclick="showRoute()">แสดงผลบนแผนที่</button>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn-secondary" style="flex:1;" onclick="clearSearchFields()">ล้างช่องค้นหา</button>
+            </div>
+
+            <div class="search-hint">
+                พิมพ์ชื่อสถานที่แล้วเลือกจากรายการ (ฐานข้อมูล OpenStreetMap) · พิมพ์พิกัดตรง ๆ ได้ เช่น
+                <code>13.9125, 100.6067</code> หรือ <code>13 54.75N 100 36.40E</code> ·
+                คลิกบนแผนที่เพื่อเพิ่มจุดใหม่ · กด Enter เพื่อแสดงผลทันที
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h3>พารามิเตอร์การบิน</h3>
+            <div style="display: flex; gap: 12px;">
+                <div class="form-group" style="flex: 1;">
+                    <label for="flight-altitude">ความสูงบิน (ฟุต):</label>
+                    <input type="number" id="flight-altitude" value="32000" oninput="updateAltitudeDisplay()">
+                </div>
+                <div class="form-group" style="flex: 1;">
+                    <label for="flight-speed">ความเร็วบินเฉลี่ย (Knots):</label>
+                    <input type="number" id="flight-speed" value="450" min="1" oninput="calculateSummary()">
+                </div>
+            </div>
+        </div>
+
+        <div class="summary-box" id="summary-box">
+            <h3>สรุปข้อมูลเส้นทาง</h3>
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="value" id="stat-alt">32,000</div>
+                    <div class="label">ความสูง (ฟุต)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="stat-dist">0</div>
+                    <div class="label">ระยะทางรวม (NM)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="value" id="stat-time">00:00</div>
+                    <div class="label">เวลาบิน (+5 นาที)</div>
+                    <div style="font-size: 11px; color: #6c757d; margin-top: 4px;">
+                        เวลาบินในอากาศ: <span id="stat-actual-time">00:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <h4>รายการ Waypoint (ลาก ☰ เพื่อสลับลำดับ)</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 5%;"></th>
+                        <th style="width: 8%;">ลำดับ</th>
+                        <th style="width: 20%;">ชื่อ</th>
+                        <th style="width: 35%;">พิกัด (DDM)</th>
+                        <th style="width: 14%;">ระยะ (NM)</th>
+                        <th style="width: 18%;">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody id="wp-table-body">
+                </tbody>
+            </table>
+
+        </div>
+
+        <div class="cap-btns">
+            <button type="button" class="btn-share" id="btn-share" onclick="captureRoute('share')">📤 แชร์ภาพ (ไลน์)</button>
+            <button type="button" class="btn-img" onclick="captureRoute('save')">💾 บันทึกภาพ</button>
+        </div>
+        <div class="cap-btns">
+            <button type="button" class="btn-secondary" style="flex:1;" onclick="copySummaryText()">คัดลอกข้อความสรุป</button>
+            <button type="button" class="btn-secondary" style="flex:1;" onclick="exportDB()">ส่งออก DB</button>
+            <button type="button" class="btn-secondary" style="flex:1;" onclick="document.getElementById('imp').click()">นำเข้า DB</button>
+            <input type="file" id="imp" accept="application/json" style="display:none;" onchange="importDB(this)">
+        </div>
+
+        <div style="padding: 0 0 24px;">
+            <button class="btn-danger" onclick="clearAllRoute()">ล้างข้อมูลเส้นทางทั้งหมด</button>
+        </div>
+    </div>
+
+    <!-- ไลบรารีภายนอก -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+    <script>
+        const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true });
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, crossOrigin: true });
+
+        const map = L.map('map', { center: [13.7563, 100.5018], zoom: 6, layers: [streetLayer] });
+        const layerControl = L.control.layers({ "แผนที่ถนน": streetLayer, "ภาพถ่ายดาวเทียม": satelliteLayer }).addTo(map);
+
+        // นำเข้าและแสดงเส้นเขตแดน (Borders)
+        fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
+            .then(response => response.json())
+            .then(data => {
+                const borderLayer = L.geoJSON(data, {
+                    style: { color: "#ff9f43", weight: 2, fill: false, opacity: 0.8 }
+                });
+                layerControl.addOverlay(borderLayer, "เส้นเขตแดนประเทศ");
+                borderLayer.addTo(map); // เปิดใช้งานทันที
+            })
+            .catch(err => console.warn('ไม่สามารถโหลดเส้นเขตแดนได้:', err));
+
+        let waypoints = [];
+        let markers = [];
+        let flightPolyline = null;
+
+        const tbody = document.getElementById('wp-table-body');
+        Sortable.create(tbody, {
+            handle: '.drag-handle',
+            animation: 150,
+            onEnd: function (evt) {
+                const movedItem = waypoints.splice(evt.oldIndex, 1)[0];
+                waypoints.splice(evt.newIndex, 0, movedItem);
+                reorderRowsFromWaypoints();
+                renderRows();
+                redrawMap();
+                calculateSummary();
+            }
+        });
+
+        /* ============ ระบบค้นหาสถานที่ (Nominatim / OpenStreetMap) ============ */
+        const NOMINATIM = 'https://nominatim.openstreetmap.org';
+        const searchSel = { from: null, to: null };
+        const searchTimer = { from: null, to: null };
+
+        async function geocodeSearch(q) {
+            const url = `${NOMINATIM}/search?format=jsonv2&limit=6&accept-language=th,en&viewbox=97,21,106,5&bounded=0&q=${encodeURIComponent(q)}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('geocode failed');
+            return await res.json();
+        }
+
+        async function geocodeFirst(q) {
+            try {
+                if (provOk && found.length >= 3) throw 0;
+                const list = await geocodeSearch(q);
+                if (!list.length) return null;
+                return { name: shortName(list[0]), lat: parseFloat(list[0].lat), lng: parseFloat(list[0].lon) };
+            } catch (e) { return null; }
+        }
+
+        async function reverseGeocode(lat, lng) {
+            try {
+                const url = `${NOMINATIM}/reverse?format=jsonv2&accept-language=th,en&lat=${lat}&lon=${lng}`;
+                const res = await fetch(url);
+                const d = await res.json();
+                return d.name || (d.display_name ? d.display_name.split(',')[0].trim() : null);
+            } catch (e) { return null; }
+        }
+
+        function shortName(r) {
+            return (r.name && r.name.trim()) ? r.name.trim() : r.display_name.split(',')[0].trim();
+        }
+
+        // รองรับการพิมพ์พิกัดตรง ๆ: DD ("13.9125, 100.6067") และ DDM ("13 54.75N 100 36.40E")
+        function parseCoordText(text) {
+            const t = text.trim().replace(/[°'"]/g, ' ').replace(/\s+/g, ' ');
+            let m = t.match(/^(-?\d{1,3}(?:\.\d+)?)\s*,?\s+(-?\d{1,3}(?:\.\d+)?)$/);
+            if (m) {
+                const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+                if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
+            }
+            m = t.match(/^(\d{1,3})\s+(\d{1,2}(?:\.\d+)?)\s*([NnSs])\s*,?\s*(\d{1,3})\s+(\d{1,2}(?:\.\d+)?)\s*([EeWw])$/);
+            if (m) return {
+                lat: ddmToDd(m[1], m[2], m[3].toUpperCase()),
+                lng: ddmToDd(m[4], m[5], m[6].toUpperCase())
+            };
+            return null;
+        }
+
+        /* ============ ฐานข้อมูลจุดบินในตัว (แก้ไข/เพิ่มได้) ============
+           [Unverified] พิกัดเป็นจุดอ้างอิงสนามบินโดยประมาณ ต้องตรวจสอบกับ AIP/เอกสารทางการก่อนใช้ปฏิบัติภารกิจ */
+        const BUILTIN_DB = [
+            { n: 'VTBD กองบิน 6 / ดอนเมือง', k: 'wing6 kb6 กองบิน6 ดอนเมือง donmuang vtbd', lat: 13.9126, lng: 100.6068 },
+            { n: 'VTBL กองบิน 2 / โคกกะเทียม ลพบุรี', k: 'wing2 kb2 กองบิน2 โคกกะเทียม ลพบุรี vtbl', lat: 14.9247, lng: 100.6425 },
+            { n: 'VTUN กองบิน 1 / โคราช', k: 'wing1 kb1 กองบิน1 โคราช นครราชสีมา vtun', lat: 14.9345, lng: 102.0783 },
+            { n: 'กองบิน 3 / วัฒนานคร สระแก้ว', k: 'wing3 kb3 กองบิน3 วัฒนานคร สระแก้ว', lat: 13.7840, lng: 102.3150 },
+            { n: 'VTPI กองบิน 4 / ตาคลี', k: 'wing4 kb4 กองบิน4 ตาคลี นครสวรรค์ vtpi', lat: 15.2775, lng: 100.2958 },
+            { n: 'VTBP กองบิน 5 / ประจวบคีรีขันธ์', k: 'wing5 kb5 กองบิน5 ประจวบ vtbp', lat: 11.7885, lng: 99.8047 },
+            { n: 'VTSB กองบิน 7 / สุราษฎร์ธานี', k: 'wing7 kb7 กองบิน7 สุราษฎร์ธานี สุราษฎร์ vtsb', lat: 9.1342, lng: 99.1372 },
+            { n: 'VTUU กองบิน 21 / อุบลราชธานี', k: 'wing21 kb21 กองบิน21 อุบล vtuu', lat: 15.2513, lng: 104.8703 },
+            { n: 'VTUD กองบิน 23 / อุดรธานี', k: 'wing23 kb23 กองบิน23 อุดร vtud', lat: 17.3864, lng: 102.7883 },
+            { n: 'VTCC กองบิน 41 / เชียงใหม่', k: 'wing41 kb41 กองบิน41 เชียงใหม่ vtcc', lat: 18.7668, lng: 98.9626 },
+            { n: 'VTPP กองบิน 46 / พิษณุโลก', k: 'wing46 kb46 กองบิน46 พิษณุโลก vtpp psl', lat: 16.7829, lng: 100.2793 },
+            { n: 'VTSS กองบิน 56 / หาดใหญ่', k: 'wing56 kb56 กองบิน56 หาดใหญ่ สงขลา vtss', lat: 6.9332, lng: 100.3927 },
+            { n: 'VTBU อู่ตะเภา', k: 'utapao อู่ตะเภา ระยอง vtbu', lat: 12.6799, lng: 101.0050 },
+            { n: 'VTBS สุวรรณภูมิ', k: 'suvarnabhumi สุวรรณภูมิ vtbs bkk', lat: 13.6900, lng: 100.7501 },
+            { n: 'VTSP ภูเก็ต', k: 'phuket ภูเก็ต vtsp hkt', lat: 8.1132, lng: 98.3169 },
+            { n: 'VTSM สมุย', k: 'samui สมุย เกาะสมุย vtsm', lat: 9.5479, lng: 100.0623 },
+            { n: 'VTSG กระบี่', k: 'krabi กระบี่ vtsg', lat: 8.0992, lng: 98.9862 },
+            { n: 'VTST ตรัง', k: 'trang ตรัง vtst', lat: 7.5087, lng: 99.6166 },
+            { n: 'VTSF นครศรีธรรมราช', k: 'nakhonsithammarat นครศรีธรรมราช vtsf', lat: 8.5396, lng: 99.9447 },
+            { n: 'VTPH หัวหิน', k: 'huahin หัวหิน vtph', lat: 12.6362, lng: 99.9515 },
+            { n: 'VTCT เชียงราย', k: 'chiangrai เชียงราย vtct', lat: 19.9526, lng: 99.8829 },
+            { n: 'VTUK ขอนแก่น', k: 'khonkaen ขอนแก่น vtuk', lat: 16.4666, lng: 102.7836 },
+            { n: 'RPDAM เขื่อนรัชชประภา', k: 'ratchaprapha เขื่อนรัชชประภา เขื่อนเชี่ยวหลาน rpdam', lat: 8.9727, lng: 98.8112 },
+            { n: 'พระตำหนักภูพิงคราชนิเวศน์', k: 'bhubing ภูพิงค์ ภูพิงคราชนิเวศน์ พระตำหนัก', lat: 18.8067, lng: 98.8967 },
+            { n: 'พระราชวังไกลกังวล หัวหิน', k: 'klaikangwon ไกลกังวล วังไกลกังวล', lat: 12.5787, lng: 99.9575 }
+        ];
+
+        let userDB = [];
+        try { userDB = JSON.parse(localStorage.getItem('fp_places') || '[]'); } catch (e) { userDB = []; }
+        function saveUserDB() { try { localStorage.setItem('fp_places', JSON.stringify(userDB)); } catch (e) {} }
+
+        function normalize(t) { return (t || '').toLowerCase().replace(/[\s\-\.]/g, ''); }
+
+        function searchLocal(q) {
+            const nq = normalize(q);
+            if (!nq) return [];
+            return [...userDB, ...BUILTIN_DB]
+                .filter(d => normalize(d.n).includes(nq) || normalize(d.k).includes(nq))
+                .slice(0, 6)
+                .map(d => ({ name: d.n, lat: d.lat, lng: d.lng, src: d.user ? 'จุดที่บันทึกไว้' : 'ฐานข้อมูลในตัว', detail: d.k }));
+        }
+
+        function addToUserDB(id) {
+            const r = getRow(id);
+            if (!r || !r.sel) { alert('ยังไม่ได้เลือกจุดในช่องนี้'); return; }
+            const name = prompt('ชื่อที่จะบันทึก:', r.sel.name);
+            if (!name) return;
+            const kw = prompt('คำค้นเพิ่มเติม (คั่นด้วยเว้นวรรค เช่น kb7 wing7 สุราษฎร์):', name) || name;
+            userDB.unshift({ n: name, k: kw, lat: r.sel.lat, lng: r.sel.lng, user: true });
+            saveUserDB();
+            alert(`บันทึก "${name}" เข้าฐานข้อมูลแล้ว (${userDB.length} จุด)`);
+        }
+
+        function exportDB() {
+            const blob = new Blob([JSON.stringify(userDB, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = 'flight-places.json'; a.click();
+        }
+
+        function importDB(input) {
+            const f = input.files[0]; if (!f) return;
+            const fr = new FileReader();
+            fr.onload = () => {
+                try {
+                    const arr = JSON.parse(fr.result);
+                    if (!Array.isArray(arr)) throw 0;
+                    userDB = [...arr.map(x => ({ ...x, user: true })), ...userDB];
+                    saveUserDB();
+                    alert(`นำเข้า ${arr.length} จุด (รวมทั้งหมด ${userDB.length} จุด)`);
+                } catch (e) { alert('ไฟล์ไม่ถูกต้อง'); }
+                input.value = '';
+            };
+            fr.readAsText(f);
+        }
+
+        // ค้นหาจาก Photon (รองรับภาษาไทย/พิมพ์ผิดได้ดีกว่า)
+        async function photonSearch(q) {
+            const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=5&lang=default&lat=13.75&lon=100.5`;
+            const res = await fetch(url);
+            const d = await res.json();
+            return (d.features || []).map(f => {
+                const pr = f.properties || {};
+                const parts = [pr.street, pr.district, pr.city, pr.county, pr.state, pr.country].filter(Boolean);
+                return {
+                    name: pr.name || parts[0] || q,
+                    lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0],
+                    src: 'Photon', detail: parts.join(', ')
+                };
+            });
+        }
+
+        /* ============ ช่องค้นหา = ตัวกำหนด Waypoint (แบบ Google Maps) ============ */
+        let rows = [];      // [{ id, sel:{name,lat,lng}|null, text }]
+        let rowSeq = 0;
+
+        function getRow(id) { return rows.find(r => r.id === id); }
+
+        function addSearchRow(prefill) {
+            const id = 'r' + (++rowSeq);
+            rows.push({ id, sel: prefill || null, text: prefill ? prefill.name : '' });
+            renderRows();
+            const el = document.getElementById('search-' + id);
+            if (el && !prefill) el.focus();
+            return id;
+        }
+
+        function removeSearchRow(id) {
+            rows = rows.filter(r => r.id !== id);
+            if (rows.length === 0) rows.push({ id: 'r' + (++rowSeq), sel: null, text: '' });
+            renderRows();
+            showRoute(true);
+        }
+
+        function syncTextFromDom() {
+            rows.forEach(r => {
+                const el = document.getElementById('search-' + r.id);
+                if (el) r.text = el.value;
+            });
+        }
+
+        function renderRows() {
+            syncTextFromDom();
+            const box = document.getElementById('search-rows');
+            box.innerHTML = '';
+            rows.forEach((r, i) => {
+                const label = i === 0 ? 'จุดเริ่มต้น (From)'
+                    : (i === rows.length - 1 ? 'จุดหมาย (To)' : 'จุดระหว่างทาง ' + i);
+                const wrap = document.createElement('div');
+                wrap.className = 'form-group';
+                wrap.innerHTML = `
+                    <div class="row-head">
+                        <label style="margin:0;">${i + 1}. ${label}</label>
+                        <span>
+                            <span class="link-save" onclick="addToUserDB('${r.id}')">+ บันทึกเข้า DB</span>
+                            <span class="link-del" onclick="removeSearchRow('${r.id}')">ลบช่อง</span>
+                        </span>
+                    </div>
+                    <div class="search-field">
+                        <input type="text" id="search-${r.id}" autocomplete="off"
+                               placeholder="ชื่อสถานที่ / สนามบิน / พิกัด"
+                               oninput="onSearchInput('${r.id}')" onkeydown="onSearchKey(event,'${r.id}')">
+                        <div class="search-results" id="results-${r.id}"></div>
+                    </div>
+                    <div class="search-hint" id="hint-${r.id}">ยังไม่ได้เลือกจุด</div>`;
+                box.appendChild(wrap);
+                wrap.querySelector('input').value = r.sel ? r.sel.name : (r.text || '');
+                if (r.sel) markSel(r.id, r.sel);
+            });
+        }
+
+        function markSel(id, obj) {
+            const h = document.getElementById('hint-' + id);
+            if (!h) return;
+            h.className = 'search-hint ok';
+            h.innerText = `✓ ${ddToDdm(obj.lat, true)} / ${ddToDdm(obj.lng, false)}`;
+        }
+
+        function setSel(id, obj) { const r = getRow(id); if (r) { r.sel = obj; r.text = obj.name; } markSel(id, obj); }
+
+        function hideResults(id) { const b = document.getElementById('results-' + id); if (b) b.style.display = 'none'; }
+
+        function onSearchInput(id) {
+            clearTimeout(searchTimer[id]);
+            const r = getRow(id); if (!r) return;
+            const q = document.getElementById('search-' + id).value.trim();
+            r.sel = null; r.text = q;
+            const h = document.getElementById('hint-' + id);
+            h.className = 'search-hint'; h.innerText = 'ยังไม่ได้เลือกจุด';
+            if (q.length < 2) { hideResults(id); return; }
+            const c = parseCoordText(q);
+            if (c) { setSel(id, { name: q, lat: c.lat, lng: c.lng }); hideResults(id); return; }
+            // หน่วงเวลาตามนโยบายการใช้งานของ Nominatim
+            searchTimer[id] = setTimeout(() => doSearch(id, q), 600);
+        }
+
+        function onSearchKey(e, id) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                clearTimeout(searchTimer[id]);
+                const q = document.getElementById('search-' + id).value.trim();
+                if (q.length >= 2 && !parseCoordText(q)) doSearch(id, q); else showRoute();
+            } else if (e.key === 'Escape') hideResults(id);
+        }
+
+        /* ============ แหล่งค้นหาแบบเลือกได้ (ใส่ API key เอง) ============ */
+        function saveProvider() {
+            try {
+                localStorage.setItem('fp_provider', document.getElementById('geo-provider').value);
+                localStorage.setItem('fp_key', document.getElementById('geo-key').value.trim());
+            } catch (e) {}
+        }
+        function loadProvider() {
+            try {
+                document.getElementById('geo-provider').value = localStorage.getItem('fp_provider') || 'free';
+                document.getElementById('geo-key').value = localStorage.getItem('fp_key') || '';
+            } catch (e) {}
+        }
+        const getProvider = () => ({
+            name: document.getElementById('geo-provider').value,
+            key: document.getElementById('geo-key').value.trim()
+        });
+
+        // Google Places API (New) — Text Search
+        async function googleSearch(q, key) {
+            const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': key,
+                    'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location'
+                },
+                body: JSON.stringify({ textQuery: q, languageCode: 'th', regionCode: 'TH', maxResultCount: 6 })
+            });
+            const d = await res.json();
+            if (d.error) throw new Error(d.error.message);
+            return (d.places || []).map(pl => ({
+                name: pl.displayName ? pl.displayName.text : q,
+                lat: pl.location.latitude, lng: pl.location.longitude,
+                src: 'Google', detail: pl.formattedAddress || ''
+            }));
+        }
+
+        // JSONP สำรอง กรณี CORS ถูกบล็อก
+        function jsonp(url) {
+            return new Promise((res, rej) => {
+                const cb = 'ldcb' + Math.random().toString(36).slice(2);
+                const sc = document.createElement('script');
+                const done = ok => { delete window[cb]; sc.remove(); };
+                window[cb] = d => { done(); res(d); };
+                sc.onerror = () => { done(); rej(new Error('เชื่อมต่อไม่ได้')); };
+                sc.src = url + '&callback=' + cb;
+                document.body.appendChild(sc);
+                setTimeout(() => { if (window[cb]) { done(); rej(new Error('หมดเวลารอ')); } }, 8000);
+            });
+        }
+
+        // Longdo Map Search — รองรับหลายรูปแบบ response
+        async function longdoSearch(q, key) {
+            const url = `https://search.longdo.com/mapsearch/json/search?keyword=${encodeURIComponent(q)}&limit=8&span=1000km&key=${encodeURIComponent(key)}`;
+            let d;
+            try { d = await (await fetch(url)).json(); } catch (e) { d = await jsonp(url); }
+            const arr = d.data || d.results || d.list || [];
+            return arr.map(r => ({
+                name: r.name || r.title || q,
+                lat: parseFloat(r.lat !== undefined ? r.lat : r.latitude),
+                lng: parseFloat(r.lon !== undefined ? r.lon : (r.long !== undefined ? r.long : r.longitude)),
+                src: 'Longdo',
+                detail: [r.address, r.subdistrict, r.district, r.province].filter(Boolean).join(', ')
+            })).filter(r => !isNaN(r.lat) && !isNaN(r.lng));
+        }
+
+        async function locationiqSearch(q, key) {
+            const url = `https://api.locationiq.com/v1/autocomplete?key=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}&limit=6&countrycodes=th&accept-language=th`;
+            const arr = await (await fetch(url)).json();
+            return (Array.isArray(arr) ? arr : []).map(r => ({
+                name: (r.address && r.address.name) || r.display_name.split(',')[0],
+                lat: parseFloat(r.lat), lng: parseFloat(r.lon),
+                src: 'LocationIQ', detail: r.display_name
+            }));
+        }
+
+        async function providerSearch(q) {
+            const p = getProvider();
+            if (p.name === 'free' || !p.key) return null;
+            if (p.name === 'google') return await googleSearch(q, p.key);
+            if (p.name === 'longdo') return await longdoSearch(q, p.key);
+            if (p.name === 'locationiq') return await locationiqSearch(q, p.key);
+            return null;
+        }
+
+        function renderResultList(id, items) {
+            const box = document.getElementById('results-' + id);
+            if (!box) return;
+            box.innerHTML = '';
+            items.forEach(res => {
+                const d = document.createElement('div');
+                d.innerHTML = `<b>${res.name}</b> <span style="color:#0d6efd;font-size:11px;">[${res.src}]</span>` +
+                    (res.detail ? `<br><span style="color:#6c757d;">${res.detail}</span>` : '');
+                d.onclick = () => {
+                    setSel(id, { name: res.name, lat: res.lat, lng: res.lng });
+                    document.getElementById('search-' + id).value = res.name;
+                    hideResults(id);
+                };
+                box.appendChild(d);
+            });
+            box.style.display = 'block';
+        }
+
+        // ค้นหา 3 ชั้น: ฐานข้อมูลในตัว -> Photon -> Nominatim
+        async function doSearch(id, q) {
+            const box = document.getElementById('results-' + id);
+            if (!box) return;
+            let found = searchLocal(q);
+            if (found.length) renderResultList(id, found);
+            else { box.innerHTML = '<div>กำลังค้นหา...</div>'; box.style.display = 'block'; }
+
+            const seen = new Set(found.map(f => f.name));
+            const push = arr => arr.forEach(r => {
+                if (!seen.has(r.name) && found.length < 12) { seen.add(r.name); found.push(r); }
+            });
+
+            let provOk = false;
+            try {
+                const pr = await providerSearch(q);
+                if (pr) { push(pr); provOk = true; }
+            } catch (e) {
+                box.innerHTML = `<div style="color:#dc3545;">แหล่งค้นหาที่เลือกใช้ไม่ได้: ${e.message} — ใช้แหล่งฟรีแทน</div>`;
+            }
+            if (!provOk || found.length < 3) { try { push(await photonSearch(q)); } catch (e) {} }
+            try {
+                if (provOk && found.length >= 3) throw 0;
+                const list = await geocodeSearch(q);
+                push(list.map(r => ({
+                    name: shortName(r), lat: parseFloat(r.lat), lng: parseFloat(r.lon),
+                    src: 'OpenStreetMap', detail: r.display_name
+                })));
+            } catch (e) {}
+
+            if (!found.length) { box.innerHTML = '<div>ไม่พบผลลัพธ์ — ลองพิมพ์พิกัดโดยตรง หรือคลิกตำแหน่งบนแผนที่</div>'; return; }
+            renderResultList(id, found);
+        }
+
+        // ปุ่มแสดงผล: แปลงทุกช่องค้นหาเป็น Waypoint แล้ววาดเส้นทาง
+        async function showRoute(silent) {
+            const btn = document.getElementById('btn-show');
+            if (btn && !silent) { btn.disabled = true; btn.innerText = 'กำลังค้นหาพิกัด...'; }
+            syncTextFromDom();
+            const list = [];
+            for (const r of rows) {
+                const q = (r.text || '').trim();
+                if (!q && !r.sel) continue;
+                if (!r.sel || r.sel.name !== q) {
+                    const c = parseCoordText(q);
+                    r.sel = c ? { name: q, lat: c.lat, lng: c.lng } : await geocodeFirst(q);
+                    if (r.sel) markSel(r.id, r.sel);
+                }
+                if (r.sel) {
+                    list.push({ name: r.sel.name, lat: r.sel.lat, lng: r.sel.lng, rowId: r.id });
+                } else {
+                    const h = document.getElementById('hint-' + r.id);
+                    if (h) { h.className = 'search-hint'; h.innerText = `ไม่พบพิกัดของ "${q}"`; }
+                }
+            }
+            waypoints = list;
+            redrawMap();
+            calculateSummary();
+            if (btn && !silent) { btn.disabled = false; btn.innerText = 'แสดงผลบนแผนที่'; }
+        }
+
+        function clearSearchFields() {
+            rows = [{ id: 'r' + (++rowSeq), sel: null, text: '' }, { id: 'r' + (++rowSeq), sel: null, text: '' }];
+            renderRows();
+        }
+
+        // ปิดรายการผลลัพธ์เมื่อคลิกที่อื่น
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.search-field')) rows.forEach(r => hideResults(r.id));
+        });
+
+        // คลิกบนแผนที่ = เพิ่มจุดใหม่ (เดาชื่อสถานที่ให้อัตโนมัติ)
+        map.on('click', async e => {
+            const nm = await reverseGeocode(e.latlng.lat, e.latlng.lng);
+            const sel = { name: nm || `WP${rows.length + 1}`, lat: e.latlng.lat, lng: e.latlng.lng };
+            syncTextFromDom();
+            const empty = rows.find(r => !r.sel && !(r.text || '').trim());
+            if (empty) { empty.sel = sel; empty.text = sel.name; renderRows(); }
+            else addSearchRow(sel);
+            showRoute(true);
+        });
+
+        function ddmToDd(deg, min, dir) {
+            let dd = parseFloat(deg) + (parseFloat(min) / 60);
+            if (dir === 'S' || dir === 'W') dd = dd * -1;
+            return dd;
+        }
+
+        function ddToDdm(dd, isLat) {
+            const dir = isLat ? (dd >= 0 ? 'N' : 'S') : (dd >= 0 ? 'E' : 'W');
+            const abs = Math.abs(dd);
+            const deg = Math.floor(abs);
+            const min = (abs - deg) * 60;
+            return `${deg}° ${min.toFixed(3)}' ${dir}`;
+        }
+
+        function ddToDdmParts(dd, isLat) {
+            const dir = isLat ? (dd >= 0 ? 'N' : 'S') : (dd >= 0 ? 'E' : 'W');
+            const abs = Math.abs(dd);
+            const deg = Math.floor(abs);
+            const min = (abs - deg) * 60;
+            return { deg, min: min.toFixed(3), dir };
+        }
+
+        // แก้ไข = โฟกัสไปที่ช่องค้นหาของจุดนั้น
+        function editWaypoint(index) {
+            const id = waypoints[index] && waypoints[index].rowId;
+            const el = id && document.getElementById('search-' + id);
+            if (!el) { alert('จุดนี้ไม่มีช่องค้นหาที่ผูกอยู่'); return; }
+            document.getElementById('flight-data').scrollTop = 0;
+            el.focus(); el.select();
+        }
+
+        function deleteWaypoint(index) {
+            const id = waypoints[index] && waypoints[index].rowId;
+            waypoints.splice(index, 1);
+            if (id) rows = rows.filter(r => r.id !== id);
+            if (rows.length === 0) rows.push({ id: 'r' + (++rowSeq), sel: null, text: '' });
+            renderRows();
+            redrawMap();
+            calculateSummary();
+        }
+
+        function reorderRowsFromWaypoints() {
+            const order = waypoints.map(w => w.rowId).filter(Boolean);
+            const inOrder = order.map(id => getRow(id)).filter(Boolean);
+            rows = [...inOrder, ...rows.filter(r => !order.includes(r.id))];
+        }
+
+        function redrawMap() {
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            if (flightPolyline) {
+                map.removeLayer(flightPolyline);
+                flightPolyline = null;
+            }
+
+            waypoints.forEach((wp, idx) => {
+                const marker = L.marker([wp.lat, wp.lng]).addTo(map);
+                
+                // แสดงชื่อจุดไว้ตลอดเวลา
+                marker.bindTooltip(wp.name, {
+                    permanent: true, 
+                    direction: 'right', 
+                    offset: [15, 0],
+                    className: 'wp-permanent-tooltip'
+                });
+                
+                // Popup ข้อมูลรายละเอียดเมื่อคลิก
+                marker.bindPopup(`<b>${idx + 1}. ${wp.name}</b><br>${ddToDdm(wp.lat, true)}, ${ddToDdm(wp.lng, false)}`);
+                markers.push(marker);
+            });
+
+            let geoJsonFeatures = [];
+            for (let i = 0; i < waypoints.length - 1; i++) {
+                const start = turf.point([waypoints[i].lng, waypoints[i].lat]);
+                const end = turf.point([waypoints[i + 1].lng, waypoints[i + 1].lat]);
+                geoJsonFeatures.push(turf.greatCircle(start, end));
+            }
+
+            if (geoJsonFeatures.length > 0) {
+                flightPolyline = L.geoJSON(turf.featureCollection(geoJsonFeatures), {
+                    style: { color: '#ff3838', weight: 3 }
+                }).addTo(map);
+                map.fitBounds(flightPolyline.getBounds(), { padding: [40, 40] });
+            } else if (waypoints.length === 1) {
+                map.setView([waypoints[0].lat, waypoints[0].lng], 9);
+            }
+        }
+
+        function calculateSummary() {
+            let totalDist = 0;
+            tbody.innerHTML = '';
+
+            for (let i = 0; i < waypoints.length; i++) {
+                let legDist = 0;
+                if (i > 0) {
+                    const start = turf.point([waypoints[i - 1].lng, waypoints[i - 1].lat]);
+                    const end = turf.point([waypoints[i].lng, waypoints[i].lat]);
+                    legDist = turf.distance(start, end, { units: 'nauticalmiles' });
+                    totalDist += legDist;
+                }
+
+                const ddmString = `${ddToDdm(waypoints[i].lat, true)}<br>${ddToDdm(waypoints[i].lng, false)}`;
+                const tr = document.createElement('tr');
+                // แสดงระยะทางราย Segment แบบไม่มีทศนิยม
+                tr.innerHTML = `
+                    <td class="drag-handle" title="ลากเพื่อสลับลำดับ">☰</td>
+                    <td>${i + 1}</td>
+                    <td><b>${waypoints[i].name}</b></td>
+                    <td>${ddmString}</td>
+                    <td>${i === 0 ? '-' : legDist.toFixed(0)}</td>
+                    <td>
+                        <button class="btn-action btn-action-edit" onclick="editWaypoint(${i})">แก้ไข</button>
+                        <button class="btn-action btn-action-delete" onclick="deleteWaypoint(${i})">ลบ</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            }
+
+            // แสดงระยะทางรวมแบบไม่มีทศนิยม
+            document.getElementById('stat-dist').innerText = totalDist.toFixed(0);
+            
+            const speed = parseFloat(document.getElementById('flight-speed').value);
+            if (speed > 0 && totalDist > 0) {
+                const totalMinutes = (totalDist / speed) * 60;
+                
+                // 1. เวลาบินในอากาศ (คำนวณจริง ไม่บวก ไม่ปัดเศษ)
+                const actualH = Math.floor(totalMinutes / 60);
+                const actualM = Math.round(totalMinutes % 60);
+                document.getElementById('stat-actual-time').innerText = 
+                    `${String(actualH).padStart(2, '0')}:${String(actualM).padStart(2, '0')}`;
+                
+                // 2. เวลาบิน (บวก 5 นาที และปัดเศษลงท้าย 0 หรือ 5)
+                const adjustedMinutes = totalMinutes + 5;
+                const roundedMinutes = Math.round(adjustedMinutes / 5) * 5;
+                const finalH = Math.floor(roundedMinutes / 60);
+                const finalM = roundedMinutes % 60;
+                document.getElementById('stat-time').innerText = 
+                    `${String(finalH).padStart(2, '0')}:${String(finalM).padStart(2, '0')}`;
+            } else {
+                document.getElementById('stat-time').innerText = "00:00";
+                document.getElementById('stat-actual-time').innerText = "00:00";
+            }
+        }
+
+        function updateAltitudeDisplay() {
+            const alt = document.getElementById('flight-altitude').value || 0;
+            document.getElementById('stat-alt').innerText = parseInt(alt, 10).toLocaleString();
+        }
+
+        function clearAllRoute() {
+            waypoints = [];
+            document.getElementById('route-preset').value = '';
+            clearSearchFields();
+            redrawMap();
+            calculateSummary();
+        }
+
+        const PRESETS = {
+            'bkk-cnx': [
+                { name: 'VTBD ดอนเมือง', lat: 13.9125, lng: 100.6067 },
+                { name: 'PSL พิษณุโลก', lat: 16.7833, lng: 100.2833 },
+                { name: 'VTCC เชียงใหม่', lat: 18.7668, lng: 98.9626 }
+            ],
+            'bkk-hkt': [
+                { name: 'VTBD ดอนเมือง', lat: 13.9125, lng: 100.6067 },
+                { name: 'SURAT สุราษฎร์ธานี', lat: 9.1325, lng: 99.1383 },
+                { name: 'VTSP ภูเก็ต', lat: 8.1132, lng: 98.3169 }
+            ],
+            'bkk-nrt': [
+                { name: 'VTBS สุวรรณภูมิ', lat: 13.6811, lng: 100.7472 },
+                { name: 'RJAA นาริตะ', lat: 35.7647, lng: 140.3863 }
+            ]
+        };
+
+        function loadPresetRoute() {
+            const val = document.getElementById('route-preset').value;
+            if (!val) return;
+            rows = PRESETS[val].map(p => ({ id: 'r' + (++rowSeq), sel: { ...p }, text: p.name }));
+            renderRows();
+            showRoute(true);
+        }
+
+
+        /* ============ บันทึกภาพ & แชร์ (ไลน์) ============ */
+        function routeTitle() {
+            if (!waypoints.length) return 'แผนการบิน';
+            return `${waypoints[0].name} → ${waypoints[waypoints.length - 1].name}`;
+        }
+
+        function buildTextSummary() {
+            const alt = document.getElementById('flight-altitude').value;
+            const spd = document.getElementById('flight-speed').value;
+            let t = `แผนการบิน: ${routeTitle()}\n`;
+            t += `ความสูง ${Number(alt).toLocaleString()} ฟุต | ความเร็ว ${spd} kt\n`;
+            t += `ระยะทางรวม ${document.getElementById('stat-dist').innerText} NM | เวลาบิน ${document.getElementById('stat-time').innerText} (ในอากาศ ${document.getElementById('stat-actual-time').innerText})\n\n`;
+            waypoints.forEach((w, i) => {
+                t += `${i + 1}. ${w.name}  ${ddToDdm(w.lat, true)} / ${ddToDdm(w.lng, false)}\n`;
+            });
+            return t;
+        }
+
+        async function copySummaryText() {
+            try { await navigator.clipboard.writeText(buildTextSummary()); alert('คัดลอกข้อความสรุปแล้ว วางในไลน์ได้เลย'); }
+            catch (e) { prompt('คัดลอกข้อความด้านล่าง:', buildTextSummary()); }
+        }
+
+        // สร้างแผงสรุปสำหรับภาพแชร์ (ความกว้างคงที่ ไม่ขึ้นกับขนาดจอ)
+        function buildSharePanel() {
+            const alt = Number(document.getElementById('flight-altitude').value || 0).toLocaleString();
+            const spd = document.getElementById('flight-speed').value;
+            const rows_ = waypoints.map((w, i) => {
+                let leg = '-';
+                if (i > 0) leg = turf.distance(
+                    turf.point([waypoints[i - 1].lng, waypoints[i - 1].lat]),
+                    turf.point([w.lng, w.lat]), { units: 'nauticalmiles' }).toFixed(0);
+                return `<tr>
+                    <td style="text-align:center;">${i + 1}</td>
+                    <td><b>${w.name}</b></td>
+                    <td style="white-space:nowrap;">${ddToDdm(w.lat, true)}<br>${ddToDdm(w.lng, false)}</td>
+                    <td style="text-align:right;">${leg}</td></tr>`;
+            }).join('');
+
+            const el = document.createElement('div');
+            el.style.cssText = 'position:fixed;left:-20000px;top:0;width:820px;background:#fff;' +
+                "padding:24px;font-family:'Segoe UI',Tahoma,sans-serif;box-sizing:border-box;";
+            el.innerHTML = `
+                <div style="display:flex;gap:14px;margin-bottom:20px;">
+                    ${[[alt, 'ความสูง (ฟุต)'], [document.getElementById('stat-dist').innerText, 'ระยะทางรวม (NM)'],
+                       [document.getElementById('stat-time').innerText, 'เวลาบิน (+5 นาที)']].map(c => `
+                    <div style="flex:1;border:1px solid #dee2e6;border-radius:8px;padding:16px 10px;text-align:center;">
+                        <div style="font-size:42px;font-weight:700;color:#0d6efd;line-height:1.15;">${c[0]}</div>
+                        <div style="font-size:19px;color:#6c757d;">${c[1]}</div>
+                    </div>`).join('')}
+                </div>
+                <div style="font-size:20px;color:#495057;margin-bottom:14px;">
+                    ความเร็วเฉลี่ย ${spd} kt · เวลาบินในอากาศ ${document.getElementById('stat-actual-time').innerText}
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:24px;">
+                    <thead><tr style="background:#e9ecef;">
+                        <th style="border:1px solid #dee2e6;padding:12px;width:70px;">ลำดับ</th>
+                        <th style="border:1px solid #dee2e6;padding:12px;text-align:left;">ชื่อจุด</th>
+                        <th style="border:1px solid #dee2e6;padding:12px;text-align:left;width:290px;">พิกัด (DDM)</th>
+                        <th style="border:1px solid #dee2e6;padding:12px;width:110px;">ระยะ (NM)</th>
+                    </tr></thead>
+                    <tbody>${rows_}</tbody>
+                </table>`;
+            el.querySelectorAll('tbody td').forEach(td => td.style.cssText += 'border:1px solid #dee2e6;padding:12px;');
+            document.body.appendChild(el);
+            return el;
+        }
+
+        async function captureRoute(mode) {
+            if (!waypoints.length) { alert('ยังไม่มีจุดบิน กรุณากด "แสดงผลบนแผนที่" ก่อน'); return; }
+            const btn = document.getElementById('btn-share');
+            const oldTxt = btn.innerText;
+            btn.disabled = true; btn.innerText = 'กำลังสร้างภาพ...';
+
+            const mc = document.getElementById('map-container');
+            const prevStyle = mc.getAttribute('style') || '';
+            let panel = null;
+            try {
+                // บังคับแผนที่เป็นกรอบแนวนอนชั่วคราว (นอกจอ) เพื่อให้ได้ภาพ landscape เสมอ
+                const MW = 980, MH = 620;
+                mc.style.cssText = `position:fixed;left:-20000px;top:0;width:${MW}px;height:${MH}px;`;
+                map.invalidateSize();
+                if (flightPolyline) map.fitBounds(flightPolyline.getBounds(), { padding: [60, 60] });
+                else if (waypoints.length === 1) map.setView([waypoints[0].lat, waypoints[0].lng], 11);
+                await new Promise(r => setTimeout(r, 2000)); // รอ tile โหลด
+
+                const sc = 2;
+                const opt = { useCORS: true, scale: sc, logging: false, backgroundColor: '#ffffff',
+                    ignoreElements: el => el.classList && el.classList.contains('leaflet-control-container') };
+                const mapCv = await html2canvas(document.getElementById('map'), opt);
+
+                // เก็บพิกัดพิกเซลของเส้นทางไว้วาดทับ (กัน html2canvas ไม่ render SVG ของ Leaflet)
+                const linePaths = [];
+                for (let i = 0; i < waypoints.length - 1; i++) {
+                    const gc = turf.greatCircle(
+                        turf.point([waypoints[i].lng, waypoints[i].lat]),
+                        turf.point([waypoints[i + 1].lng, waypoints[i + 1].lat]), { npoints: 80 });
+                    const g = gc.geometry;
+                    const segs = g.type === 'MultiLineString' ? g.coordinates : [g.coordinates];
+                    segs.forEach(seg => linePaths.push(seg.map(cd => {
+                        const pt = map.latLngToContainerPoint([cd[1], cd[0]]);
+                        return [pt.x, pt.y];
+                    })));
+                }
+
+                mc.setAttribute('style', prevStyle);
+                map.invalidateSize();
+
+                panel = buildSharePanel();
+                const sumCv = await html2canvas(panel, opt);
+                panel.remove(); panel = null;
+
+                // ---- ประกอบภาพแนวนอน: หัวเรื่อง / แผนที่ซ้าย / สรุปขวา ----
+                const pad = 16 * sc, gap = 16 * sc, headH = 96 * sc;
+                const bodyH = Math.max(mapCv.height, sumCv.height);
+                const out = document.createElement('canvas');
+                out.width = pad * 2 + mapCv.width + gap + sumCv.width;
+                out.height = headH + bodyH + pad * 2;
+                const c = out.getContext('2d');
+                c.fillStyle = '#ffffff'; c.fillRect(0, 0, out.width, out.height);
+                c.fillStyle = '#0d6efd'; c.fillRect(0, 0, out.width, headH);
+
+                // หัวเรื่อง ย่อขนาดอัตโนมัติไม่ให้ตกขอบ
+                const title = routeTitle();
+                let fs = 40 * sc;
+                do { c.font = `bold ${fs}px 'Segoe UI', Tahoma, sans-serif`; fs -= 1 * sc; }
+                while (c.measureText(title).width > out.width - pad * 2 && fs > 12 * sc);
+                c.fillStyle = '#ffffff';
+                c.fillText(title, pad, 48 * sc);
+                c.font = `${20 * sc}px 'Segoe UI', Tahoma, sans-serif`;
+                c.fillText(new Date().toLocaleString('th-TH'), pad, 80 * sc);
+
+                c.drawImage(mapCv, pad, headH + pad);
+
+                // วาดเส้นทางสีแดงทับ (พิกัดพิกเซล x scale)
+                c.save();
+                c.translate(pad, headH + pad);
+                c.lineJoin = 'round'; c.lineCap = 'round';
+                linePaths.forEach(path => {
+                    if (path.length < 2) return;
+                    c.beginPath();
+                    path.forEach((pt, i) => i ? c.lineTo(pt[0] * sc, pt[1] * sc) : c.moveTo(pt[0] * sc, pt[1] * sc));
+                    c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 8 * sc; c.stroke();
+                    c.strokeStyle = '#ff3838'; c.lineWidth = 4 * sc; c.stroke();
+                });
+                c.restore();
+
+                c.strokeStyle = '#dee2e6'; c.lineWidth = sc;
+                c.strokeRect(pad, headH + pad, mapCv.width, mapCv.height);
+                c.drawImage(sumCv, pad + mapCv.width + gap, headH + pad);
+
+                const stamp = new Date().toISOString().slice(0, 16).replace(/[:T-]/g, '');
+                const fname = `flightplan-${stamp}.png`;
+                out.toBlob(async blob => {
+                    const file = new File([blob], fname, { type: 'image/png' });
+                    if (mode === 'share' && navigator.canShare && navigator.canShare({ files: [file] })) {
+                        try { await navigator.share({ files: [file], title: routeTitle(), text: buildTextSummary() }); }
+                        catch (e) {}
+                    } else {
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob); a.download = fname; a.click();
+                        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                        if (mode === 'share') alert('อุปกรณ์นี้ไม่รองรับการแชร์โดยตรง — บันทึกภาพให้แล้ว ส่งเข้าไลน์จากคลังรูปได้เลย');
+                    }
+                }, 'image/png');
+            } catch (e) {
+                mc.setAttribute('style', prevStyle); map.invalidateSize();
+                if (panel) panel.remove();
+                alert('สร้างภาพไม่สำเร็จ: ' + e.message);
+            } finally {
+                btn.disabled = false; btn.innerText = oldTxt;
+            }
+        }
+
+        // ลงทะเบียน service worker (ทำให้ติดตั้งเป็นแอปและใช้ออฟไลน์ได้)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+        }
+
+        // เริ่มต้นการแสดงผลครั้งแรก
+        loadProvider();
+        clearSearchFields();
+        updateAltitudeDisplay();
+    </script>
+</body>
+</html>
